@@ -1,129 +1,91 @@
+const injectedArea = document.getElementById("injectedArea");
 
-// --- Utilities (safe) ---
-function escapeHTML(s) {
-    return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+function addToInjected(el) {
+injectedArea.appendChild(el);
+injectedArea.appendChild(document.createElement("div")).style.height = "10px";
 }
 
-function getQueryParam(name) {
-    const u = new URL(location.href);
-    return u.searchParams.get(name) || "";
+function markSuspicious(el, label) {
+el.classList.add("sus");
+el.setAttribute("data-flag", label);
+return el;
 }
 
-function collectSources() {
-    return {
-    query_q: getQueryParam("q"),
-    hash: location.hash ? location.hash.slice(1) : "",
-    localStorage_test: localStorage.getItem("dom_injection_test") || "",
-    last_postMessage: window.__lastPM || ""
-    };
-}
+// 1) Script tag insertion (SAFE): non-executable MIME type
+document.getElementById("btnScript").addEventListener("click", () => {
+const s = document.createElement("script");
+s.type = "application/x-test"; // not executed
+s.textContent = "/* demo: non-executing script element */\nconsole.log('not executed');";
+document.body.appendChild(s); // still triggers SCRIPT node insertion detector
 
-function renderSources() {
-    const s = collectSources();
-    document.getElementById("sources").textContent = JSON.stringify(s, null, 2);
-    return s;
-}
-
-function getUntrusted() {
-    const s = collectSources();
-    // pick the first non-empty source, else manual textarea
-    return s.query_q || s.hash || s.localStorage_test || s.last_postMessage || document.getElementById("manual").value;
-}
-
-// --- Actions ---
-document.getElementById("saveLs").addEventListener("click", () => {
-    localStorage.setItem("dom_injection_test", document.getElementById("manual").value);
-    renderSources();
+const note = document.createElement("div");
+note.textContent = "Injected a <script> element (non-executing).";
+addToInjected(markSuspicious(note, "SCRIPT tag added"));
 });
 
-document.getElementById("loadLs").addEventListener("click", () => {
-    document.getElementById("manual").value = localStorage.getItem("dom_injection_test") || "";
-    renderSources();
+// 2) Inline handler attribute
+document.getElementById("btnInline").addEventListener("click", () => {
+const b = document.createElement("button");
+b.textContent = "“Load more comments” (demo)";
+b.setAttribute("onclick", "void 0"); // inline handler attribute (flagged)
+b.addEventListener("click", (e) => e.preventDefault()); // keep harmless
+
+addToInjected(markSuspicious(b, "Inline on* handler"));
 });
 
-// postMessage simulation
-window.addEventListener("message", (ev) => {
-    // Store message payload as a "source" without acting on it.
-    window.__lastPM = (typeof ev.data === "string") ? ev.data : JSON.stringify(ev.data);
-    renderSources();
+// 3) javascript: href (click prevented)
+document.getElementById("btnJsHref").addEventListener("click", () => {
+const a = document.createElement("a");
+a.href = "javascript:void 0"; // flagged by looksLikeJsUrl()
+a.textContent = "Promo link (demo) — href=javascript:… (don’t click)";
+a.style.display = "inline-block";
+a.addEventListener("click", (e) => e.preventDefault()); // safety
+
+addToInjected(markSuspicious(a, "javascript: URL in href"));
 });
 
-document.getElementById("sendPm").addEventListener("click", () => {
-    // same-window postMessage (safe string)
-    window.postMessage("<b>PM</b>: <script>TEST</script>", "*");
+// 4) iframe without sandbox
+document.getElementById("btnIframe").addEventListener("click", () => {
+const iframe = document.createElement("iframe");
+// No sandbox attribute on purpose (flagged)
+iframe.srcdoc = "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;padding:10px'>Embedded widget (demo)</body>";
+iframe.style.width = "100%";
+iframe.style.height = "80px";
+iframe.style.border = "1px solid rgba(255,255,255,.10)";
+iframe.style.borderRadius = "12px";
+iframe.style.background = "rgba(255,255,255,.02)";
+
+addToInjected(markSuspicious(iframe, "iframe without sandbox"));
 });
 
-document.getElementById("sendPmOther").addEventListener("click", () => {
-    // simulate "other origin" by tagging payload (still same window here)
-    window.postMessage({ from: "other", payload: "<img src=x onerror=TEST>" }, "*");
+// 5) style attribute containing url(...)
+document.getElementById("btnStyleUrl").addEventListener("click", () => {
+const d = document.createElement("div");
+d.textContent = "Sponsored banner (demo) — style url(...)";
+d.setAttribute(
+    "style",
+    "padding:10px;border-radius:14px;border:1px solid rgba(255,255,255,.10);" +
+    "background-image:url(data:image/gif;base64,R0lGODlhAQABAAAAACw=);" // harmless, still matches url(
+);
+
+addToInjected(markSuspicious(d, "style contains url(...)"));
 });
 
-// Sink: innerHTML (escaped)
-document.getElementById("doInner").addEventListener("click", () => {
-    const untrusted = getUntrusted();
-    document.getElementById("outInner").innerHTML =
-    "<div><b>Rendered (escaped):</b> " + escapeHTML(untrusted) + "</div>";
+// Clear injected section
+document.getElementById("btnClear").addEventListener("click", () => {
+// remove everything except the header text lines at top
+const keep = Array.from(injectedArea.childNodes).slice(0, 4);
+injectedArea.innerHTML = "";
+keep.forEach(n => injectedArea.appendChild(n));
 });
 
-// Sink: insertAdjacentHTML (escaped)
-document.getElementById("doAdj").addEventListener("click", () => {
-    const untrusted = getUntrusted();
-    const out = document.getElementById("outAdj");
-    out.insertAdjacentHTML("beforeend",
-    "<div><b>Chunk:</b> " + escapeHTML(untrusted) + "</div>"
-    );
-});
-
-// Sink: document.write (escaped) into sandboxed iframe
-document.getElementById("doWrite").addEventListener("click", () => {
-    const untrusted = getUntrusted();
-    const iframe = document.getElementById("frame");
-    const doc = iframe.contentDocument;
-    doc.open();
-    doc.write("<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;padding:10px'>");
-    doc.write("<h3 style='margin:0 0 8px 0'>iframe document.write</h3>");
-    doc.write("<div>Escaped:</div><pre style='background:#f7f7f7;padding:8px;border-radius:8px;white-space:pre-wrap;'>"
-    + escapeHTML(untrusted) + "</pre>");
-    doc.write("</body>");
-    doc.close();
-});
-
-// "Script injection" but non-executable
-document.getElementById("doScript").addEventListener("click", () => {
-    const untrusted = getUntrusted();
-    const out = document.getElementById("outScript");
-
-    const s = document.createElement("script");
-    s.type = "application/x-test"; // not executed by browser as JS
-    s.textContent = "/* test payload (not executed) */\n" + String(untrusted);
-
-    out.textContent = "";
-    out.appendChild(document.createTextNode("Appended <script type='application/x-test'> with contents:\n"));
-    out.appendChild(document.createElement("br"));
-    out.appendChild(document.createTextNode(s.textContent));
-    document.body.appendChild(s); // still non-executable due to type
-});
-
-// Mutation spam
-function spam(n) {
-    const host = document.getElementById("outSpam");
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < n; i++) {
+// Stress
+document.getElementById("btnStress").addEventListener("click", () => {
+const frag = document.createDocumentFragment();
+for (let i = 0; i < 100; i++) {
     const div = document.createElement("div");
-    div.textContent = "node-" + i + " " + new Date().toISOString();
+    div.textContent = "Live comment #" + (i + 1);
     frag.appendChild(div);
-    }
-    host.textContent = "";
-    host.appendChild(frag);
 }
-
-document.getElementById("spam10").addEventListener("click", () => spam(10));
-document.getElementById("spam200").addEventListener("click", () => spam(200));
-
-// initial render
-renderSources();
+injectedArea.appendChild(frag);
+});
