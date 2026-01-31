@@ -67,9 +67,7 @@ function isTrackingForm(action) {
 }
 
 // Initialize heuristics on page load
-async function initHeuristics() {
-  console.log('🔍 Initializing heuristics engine');
-  
+async function initHeuristics() {  
   // Always run initial analysis - background will filter by active tab
   anomalyScore = 0;
   externalLinks = [];
@@ -80,57 +78,13 @@ async function initHeuristics() {
   checkFormSubmissions();
   checkExternalLinks();
   interceptNetworkRequests();
-  analyzeLinkPatterns();
   
   // Collect results
   const results = compileResults();
   lastResults = results;
   
-  // Report to background (background will check if tab is active)
-  reportToBackground(results);
-  
-  console.log('✅ Heuristics analysis complete:', {
-    score: results.anomalyScore,
-    severity: results.severity,
-    issues: results.detectedIssues.length
-  });
   
   return results;
-}
-
-// Check if current tab is active
-async function checkIfActiveTab() {
-  return new Promise((resolve) => {
-    // First try to get tab ID from chrome.tabs
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError) {
-        console.log('Error checking active tab:', chrome.runtime.lastError);
-        // Fallback: assume active if we can't check
-        resolve(true);
-        return;
-      }
-      
-      const currentTab = tabs[0];
-      if (!currentTab) {
-        resolve(false);
-        return;
-      }
-      
-      // Get this page's tab ID
-      chrome.runtime.sendMessage({ action: 'getTabId' }, (response) => {
-        if (chrome.runtime.lastError) {
-          // If message fails, assume we're active (fallback)
-          console.log('Could not verify tab ID, assuming active');
-          resolve(true);
-          return;
-        }
-        
-        const thisTabId = response?.tabId;
-        const isActive = thisTabId === currentTab.id;
-        resolve(isActive);
-      });
-    });
-  });
 }
 
 // Check for forms submitting to external domains (with false positive reduction)
@@ -180,7 +134,6 @@ function checkFormSubmissions() {
         const formTld = formUrl.hostname.split('.').slice(-2).join('.');
         
         if (currentTld !== formTld) {
-          console.warn(`🚨 Password form submits to different TLD: ${formUrl.hostname}`);
           anomalyScore += 80;
           confidenceScore += 60;
           detectedIssues.push({
@@ -191,7 +144,6 @@ function checkFormSubmissions() {
           });
         } else {
           // Same TLD but external - could be legitimate subdomain, lower confidence
-          console.log(`⚠️ Password form submits externally (same TLD): ${formUrl.hostname}`);
           anomalyScore += 20;
           confidenceScore += 15;
           detectedIssues.push({
@@ -202,11 +154,7 @@ function checkFormSubmissions() {
           });
         }
       }
-      // External form without password - informational only
-      else {
-        console.log(`ℹ️ External form submission (no sensitive fields): ${formUrl.hostname}`);
-        // Don't add to score, just log
-      }
+      // else: External form without password - informational only
     } catch (e) {
       // Invalid URL, skip
     }
@@ -233,7 +181,6 @@ function checkExternalLinks() {
         
         // Only flag suspicious domains (URL shorteners, high-risk TLDs, typosquatting)
         if (isSuspiciousDomain(linkUrl.hostname)) {
-          // Reduced score - link patterns are analyzed in analyzeLinkPatterns()
           anomalyScore += 10;
           confidenceScore += 5;
           detectedIssues.push({
@@ -249,8 +196,6 @@ function checkExternalLinks() {
     }
   });
   
-  // Analyze link patterns (clone detection, URL shortener chains, typosquatting)
-  analyzeLinkPatterns();
 }
 
 // Check for suspicious domain patterns (refined for link pattern analysis)
@@ -345,7 +290,6 @@ function interceptNetworkRequests() {
           
           // Only flag if sensitive data detected
           if (data && containsSensitiveData(data.toString())) {
-            console.warn(`⚠️ Sensitive data XHR POST to external domain: ${reqUrl.hostname}`);
             anomalyScore += 60;
             confidenceScore += 50;
             detectedIssues.push({
@@ -385,138 +329,8 @@ function containsSensitiveData(str) {
   return sensitivePatterns.some(pattern => lower.includes(pattern));
 }
 
-// Analyze link patterns for anomalies (refined for typosquatting and clone detection)
-function analyzeLinkPatterns() {
-  if (externalLinks.length === 0) return;
-  
-  // Filter out legitimate domains
-  const suspiciousLinks = externalLinks.filter(link => 
-    !isLegitimateExternalService(link.domain) && 
-    !KNOWN_GOOD_DOMAINS.some(domain => link.domain.includes(domain))
-  );
-  
-  if (suspiciousLinks.length === 0) return;
-  
-  const domainCounts = {};
-  suspiciousLinks.forEach(link => {
-    domainCounts[link.domain] = (domainCounts[link.domain] || 0) + 1;
-  });
-  
-  const totalLinks = document.querySelectorAll('a[href]').length;
-  
-  // CRITICAL: Clone pattern detection - >70% of links point to single external domain
-  // This indicates a full-site clone/phishing attempt
-  Object.entries(domainCounts).forEach(([domain, count]) => {
-    const percentage = (count / totalLinks) * 100;
-    if (percentage > 70 && count > 5) {
-      console.warn(`🚨 CRITICAL: ${percentage.toFixed(1)}% of links point to ${domain} (likely clone)`);
-      anomalyScore += 100;
-      confidenceScore += 80;
-      detectedIssues.push({
-        type: 'link_clone_pattern',
-        severity: 'critical',
-        message: `${count} links (${percentage.toFixed(1)}%) point to ${domain} - possible site clone`,
-        confidence: 85
-      });
-    }
-  });
-  
-  // WARNING: URL shortener chains - multiple different shortener services
-  // Indicates potential obfuscation of malicious URLs
-  const shortenedLinks = suspiciousLinks.filter(link => 
-    /bit\.ly|tinyurl|goo\.gl|t\.co|ow\.ly|short\.link|tiny\.cc|is\.gd|buff\.ly/gi.test(link.url)
-  );
-  
-  const uniqueShorteners = new Set(shortenedLinks.map(l => l.domain));
-  if (uniqueShorteners.size > 2) {
-    console.warn(`⚠️ Multiple URL shorteners detected: ${uniqueShorteners.size} different services`);
-    anomalyScore += 25;
-    confidenceScore += 20;
-    detectedIssues.push({
-      type: 'url_shortener_chain',
-      severity: 'warning',
-      message: `Multiple URL shorteners detected (${uniqueShorteners.size} different services) - potential obfuscation`,
-      confidence: 50
-    });
-  }
-  
-  // Check for typosquatting patterns
-  // Look for domains that are very similar to the current domain
-  const currentDomain = location.hostname.toLowerCase();
-  const currentDomainParts = currentDomain.split('.');
-  const currentBaseDomain = currentDomainParts.length > 1 
-    ? currentDomainParts.slice(-2).join('.') 
-    : currentDomain;
-  
-  suspiciousLinks.forEach(link => {
-    const linkDomain = link.domain.toLowerCase();
-    const linkDomainParts = linkDomain.split('.');
-    const linkBaseDomain = linkDomainParts.length > 1 
-      ? linkDomainParts.slice(-2).join('.') 
-      : linkDomain;
-    
-    // Check for typosquatting: similar domain name but different TLD or slight variations
-    if (linkBaseDomain !== currentBaseDomain && 
-        linkBaseDomain.length > 0 && 
-        currentBaseDomain.length > 0) {
-      // Calculate similarity (simple Levenshtein-like check)
-      const similarity = calculateDomainSimilarity(currentBaseDomain, linkBaseDomain);
-      
-      // Flag if domain is very similar (>80% similarity) but different
-      if (similarity > 0.8 && similarity < 1.0) {
-        console.warn(`⚠️ Possible typosquatting: ${linkBaseDomain} similar to ${currentBaseDomain} (${(similarity * 100).toFixed(0)}% similar)`);
-        anomalyScore += 30;
-        confidenceScore += 25;
-        detectedIssues.push({
-          type: 'typosquatting',
-          severity: 'warning',
-          message: `Suspicious domain similar to current site: ${linkBaseDomain}`,
-          confidence: 60
-        });
-      }
-    }
-  });
-}
-
-// Calculate domain similarity (0-1 scale)
-function calculateDomainSimilarity(domain1, domain2) {
-  // Remove TLD for comparison
-  const d1 = domain1.split('.').slice(0, -1).join('.');
-  const d2 = domain2.split('.').slice(0, -1).join('.');
-  
-  if (d1 === d2) return 1.0;
-  if (d1.length === 0 || d2.length === 0) return 0;
-  
-  // Simple character overlap check
-  const longer = d1.length > d2.length ? d1 : d2;
-  const shorter = d1.length > d2.length ? d2 : d1;
-  
-  let matches = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    if (longer.includes(shorter[i])) matches++;
-  }
-  
-  // Also check for common substrings
-  let maxCommonSubstring = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    for (let j = i + 1; j <= shorter.length; j++) {
-      const substr = shorter.substring(i, j);
-      if (longer.includes(substr) && substr.length > maxCommonSubstring) {
-        maxCommonSubstring = substr.length;
-      }
-    }
-  }
-  
-  // Combine character overlap and common substring
-  const charSimilarity = matches / longer.length;
-  const substringSimilarity = maxCommonSubstring / longer.length;
-  
-  return Math.max(charSimilarity, substringSimilarity);
-}
-
 // Listen for custom trigger events (for manual re-analysis)
 window.addEventListener('heuristics-trigger', () => {
-  console.log('🔄 Manual heuristics trigger received');
   setTimeout(() => {
     anomalyScore = 0;
     confidenceScore = 0;
@@ -527,10 +341,8 @@ window.addEventListener('heuristics-trigger', () => {
     checkFormSubmissions();
     checkExternalLinks();
     interceptNetworkRequests();
-    analyzeLinkPatterns();
     
     const results = compileResults();
-    reportToBackground(results);
   }, 100);
 });
 
@@ -653,39 +465,16 @@ function determineSeverity(score) {
   return 'secure';
 }
 
-// Report results to background script
-function reportToBackground(results) {
-  console.log('📤 Reporting heuristics results to background:', {
-    score: results.anomalyScore,
-    severity: results.severity,
-    issues: results.detectedIssues.length
-  });
-  
-  chrome.runtime.sendMessage({
-    action: 'heuristicsResults',
-    data: results
-  }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('❌ Error sending heuristics results:', chrome.runtime.lastError.message);
-    } else {
-      console.log('✅ Heuristics results sent successfully');
-    }
-  });
-}
-
 // Export for content script use
 if (typeof window !== 'undefined') {
-  console.log('🔍 Heuristics engine loaded, initializing...');
   
   // Run heuristics initialization
   function runInit() {
-    console.log('🚀 Starting heuristics initialization...');
     initHeuristics().then(results => {
       if (results) {
         lastResults = results;    
       } 
     }).catch(err => {
-      console.error('❌ Error initializing heuristics:', err);
     });
   }
   
@@ -899,5 +688,3 @@ async function getSitePermissionsBestEffort() {
 
   return perms;
 }
-
-
