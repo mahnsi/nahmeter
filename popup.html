@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NahMeter</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">🛡️ NahMeter</div>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Active</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Current Site -->
+        <section class="site-section">
+            <div class="site-url" id="currentSiteUrl">Loading...</div>
+            <div class="site-status" id="siteStatus">Analyzing...</div>
+        </section>
+
+        <!-- Anomaly Score - Prominent Display -->
+        <section class="score-section">
+            <div class="score-label">Anomaly Score</div>
+            <div class="score-value" id="anomalyScore">0</div>
+            <div class="score-details">
+                <span class="confidence" id="confidenceScore">Confidence: 0%</span>
+                <span class="severity-badge" id="severityBadge">SECURE</span>
+            </div>
+        </section>
+
+                <!-- DOM Issues -->
+        <section class="threats-section">
+            <div class="threats-header">
+                <span>DOM Issues:</span>
+            </div>
+            <div class="threats-list" id="issuesList"></div>
+        </section>
+
+
+        <!-- Quick Info -->
+        <section class="info-section">
+            <div class="info-item">
+                <span class="info-label">Connection:</span>
+                <span class="info-value" id="connectionStatus">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Last Scan:</span>
+                <span class="info-value" id="lastScan">-</span>
+            </div>
+        </section>
+
+        <!-- Permission Indicators -->
+        <section class="permissions-section" id="permissionsSection" style="display: none;">
+            <div class="permissions-header">
+                <span>Permissions this site is using:</span>
+            </div>
+            <div class="permissions-list" id="permissionsList"></div>
+        </section>
+
+        <!-- Actions -->
+        <div class="actions">
+            <button class="btn btn-secondary" id="refreshBtn">
+                🔄 Refresh
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Site Info Modal -->
+    <div class="modal" id="siteInfoModal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔍 Detailed Analysis</h2>
+                <button class="modal-close" id="closeSiteModal">×</button>
+            </div>
+            <div class="modal-body" id="siteInfoBody"></div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

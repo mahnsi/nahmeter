@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "nahmeter",
+  "version": "1.0.0",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "nahmeter"
+  },
+
+  "permissions": [
+    "tabs",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["heuristics-engine.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
