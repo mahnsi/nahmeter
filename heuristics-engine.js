@@ -700,6 +700,89 @@ if (typeof window !== 'undefined') {
   }
 }
 
+function scanDomInjectionPatterns() {
+  const issues = [];
+  let score = 0;
+
+  // 1) Any inline event handlers: onclick, onload, onerror, etc.
+  const inlineHandlers = [];
+  document.querySelectorAll("*").forEach(el => {
+    for (const attr of el.getAttributeNames()) {
+      if (attr.toLowerCase().startsWith("on")) {
+        inlineHandlers.push({ el, attr });
+        break;
+      }
+    }
+  });
+  if (inlineHandlers.length) {
+    score += Math.min(35, 5 + inlineHandlers.length * 2);
+    issues.push({
+      type: "inline_event_handler",
+      severity: "warning",
+      message: `Found ${inlineHandlers.length} inline on* event handler(s) (e.g., onclick="...").`,
+      confidence: 70
+    });
+  }
+
+  // 2) javascript: URLs
+  const jsHrefs = Array.from(document.querySelectorAll('a[href]'))
+    .filter(a => /^javascript:/i.test(a.getAttribute("href") || ""));
+  if (jsHrefs.length) {
+    score += Math.min(30, 10 + jsHrefs.length * 3);
+    issues.push({
+      type: "javascript_url",
+      severity: "warning",
+      message: `Found ${jsHrefs.length} link(s) with javascript: in href.`,
+      confidence: 75
+    });
+  }
+
+  // 3) Iframes without sandbox
+  const badIframes = Array.from(document.querySelectorAll("iframe"))
+    .filter(f => !f.hasAttribute("sandbox"));
+  if (badIframes.length) {
+    score += Math.min(35, 15 + badIframes.length * 5);
+    issues.push({
+      type: "iframe_without_sandbox",
+      severity: "warning",
+      message: `Found ${badIframes.length} iframe(s) without sandbox attribute.`,
+      confidence: 70
+    });
+  }
+
+  // 4) style="...url(...)" patterns
+  const styleUrl = Array.from(document.querySelectorAll("[style]"))
+    .filter(el => /url\s*\(/i.test(el.getAttribute("style") || ""));
+  if (styleUrl.length) {
+    score += Math.min(25, 10 + styleUrl.length * 2);
+    issues.push({
+      type: "style_url",
+      severity: "warning",
+      message: `Found ${styleUrl.length} element(s) whose inline style contains url(...).`,
+      confidence: 60
+    });
+  }
+
+  // 5) Script tags (for demo: flag any script tags with text OR non-empty src)
+  const suspiciousScripts = Array.from(document.scripts).filter(s => {
+    const hasSrc = !!(s.getAttribute("src") || "").trim();
+    const hasInline = !!(s.textContent || "").trim();
+    return hasSrc || hasInline;
+  });
+  if (suspiciousScripts.length) {
+    score += Math.min(40, 15 + suspiciousScripts.length * 4);
+    issues.push({
+      type: "script_present",
+      severity: "warning",
+      message: `Detected ${suspiciousScripts.length} script tag(s) (inline and/or external).`,
+      confidence: 55
+    });
+  }
+
+  return { score, issues };
+}
+
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== "GET_DOM_AND_PERMISSIONS") return;
 
@@ -709,20 +792,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Just wait until initial analysis is ready.
     if (!lastResults) {
       sendResponse({
-        anomalyScore: 0,
-        domIssues: [],
-        sitePermissions: []
+        anomalyScore: clamp(lastResults.anomalyScore ?? 0, 0, 100),
+      domIssues: lastResults.detectedIssues ?? [],
+      sitePermissions
       });
       return;
     }
 
 
     const sitePermissions = await getSitePermissionsBestEffort();
+
+    const domScan = scanDomInjectionPatterns();
+    const phishingScore = clamp(lastResults?.anomalyScore ?? 0, 0, 100);
+    const combinedScore = clamp(phishingScore + domScan.score, 0, 100);
+
     sendResponse({
-      anomalyScore: clamp(lastResults.anomalyScore ?? 0, 0, 100),
-      domIssues: lastResults.detectedIssues ?? [],
+      anomalyScore: combinedScore,
+      domIssues: [
+        ...(lastResults?.detectedIssues ?? []),
+        ...domScan.issues
+      ],
       sitePermissions
     });
+
   })();
 
   return true; // keep channel open
