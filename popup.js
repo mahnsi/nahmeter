@@ -78,6 +78,8 @@ async function updatePopup() {
     );
     setText("siteStatus", "⚠️ Suspicious DOM patterns detected");
   }
+
+
 }
 
 function setText(id, text) {
@@ -129,3 +131,9 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+
