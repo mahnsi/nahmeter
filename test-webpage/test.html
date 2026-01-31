@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Northstar Daily — Campus & Tech</title>
+  <style>
+    :root{
+      --bg:#0b1220; --card:#0f1a31; --muted:#9fb0d0; --text:#e7eefc;
+      --accent:#6aa9ff; --line:#24385f;
+      --warn:#ffb020; --bad:#ff5c7a; --good:#5dffb8;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    body{ margin:0; background:linear-gradient(180deg,#071022, #0b1220 40%, #071022);
+      color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    a{ color:inherit; }
+    header{
+      position:sticky; top:0; z-index:10;
+      background:rgba(7,16,34,.85); backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);
+    }
+    .wrap{ max-width: 1100px; margin:0 auto; padding: 14px 16px; }
+    .topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .brand{ display:flex; align-items:center; gap:10px; }
+    .logo{ width:34px; height:34px; border-radius:10px; background: radial-gradient(circle at 30% 30%, #7ab8ff, #2b4cff 40%, #0b1220 75%);
+      box-shadow: 0 10px 30px rgba(106,169,255,.25); border:1px solid rgba(255,255,255,.07);}
+    .brand h1{ font-size:16px; margin:0; letter-spacing:.2px; }
+    .brand span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+    nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    nav a{ text-decoration:none; padding:8px 10px; border-radius:12px; color:var(--muted); border:1px solid transparent;}
+    nav a:hover{ border-color:rgba(255,255,255,.08); background:rgba(255,255,255,.03); color:var(--text); }
+
+    main{ padding:18px 0 40px; }
+    .grid{ display:grid; grid-template-columns: 2.2fr 1fr; gap:14px; }
+    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
+
+    .card{ background:rgba(15,26,49,.85); border:1px solid rgba(255,255,255,.06);
+      border-radius:18px; overflow:hidden; box-shadow: 0 16px 60px rgba(0,0,0,.35); }
+    .card .pad{ padding:14px 14px; }
+    .hero{ padding:16px 14px; background:
+      radial-gradient(1200px 500px at 20% 0%, rgba(106,169,255,.25), transparent 60%),
+      radial-gradient(800px 350px at 90% 30%, rgba(93,255,184,.14), transparent 55%); }
+    .hero h2{ margin:0 0 8px; font-size:20px; }
+    .hero p{ margin:0; color:var(--muted); }
+
+    .pill{ display:inline-flex; align-items:center; gap:8px; font-size:12px;
+      padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03); color:var(--muted); }
+    .pill b{ color:var(--text); font-weight:600; }
+
+    .post{ padding:14px; border-top:1px solid rgba(255,255,255,.06); }
+    .post h3{ margin:0 0 6px; font-size:16px; }
+    .post p{ margin:0; color:var(--muted); }
+
+    .sidebar h3{ margin:0 0 8px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.12em; }
+    .item{ padding:12px 14px; border-top:1px solid rgba(255,255,255,.06); display:flex; justify-content:space-between; gap:10px; }
+    .item .meta{ color:var(--muted); font-size:12px; }
+
+    /* Demo panel */
+    .demo{ position:sticky; top:74px; }
+    .demo .pad{ display:flex; flex-direction:column; gap:10px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; }
+    button{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:13px;
+    }
+    button:hover{ background:rgba(255,255,255,.07); }
+    .small{ font-size:12px; color:var(--muted); }
+    .kbd{ font-family: var(--mono); font-size:11px; padding:2px 6px; border-radius:8px; border:1px solid rgba(255,255,255,.10); background:rgba(0,0,0,.25); }
+
+    /* Highlight styling for “suspicious” nodes */
+    .sus{
+      outline: 2px solid rgba(255,176,32,.9);
+      box-shadow: 0 0 0 6px rgba(255,176,32,.12);
+      border-radius: 12px;
+      position: relative;
+    }
+    .sus::after{
+      content: attr(data-flag);
+      position:absolute; top:-10px; left:12px;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255,176,32,.18);
+      border: 1px solid rgba(255,176,32,.55);
+      color: #ffd7a0;
+      backdrop-filter: blur(6px);
+    }
+
+    .danger-note{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,92,122,.25);
+      background:rgba(255,92,122,.08);
+      color:#ffd2dc;
+      font-size:12px;
+    }
+    .ok-note{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(93,255,184,.22);
+      background:rgba(93,255,184,.08);
+      color:#cdfbea;
+      font-size:12px;
+    }
+
+    /* Area where the dynamic DOM changes occur */
+    #injectedArea{
+      margin-top:12px;
+      border-top:1px dashed rgba(255,255,255,.12);
+      padding-top:12px;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>Northstar Daily</h1>
+        <span>Campus · Tech · Toronto</span>
+      </div>
+    </div>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#">Campus</a>
+      <a href="#">Tech</a>
+      <a href="#">Events</a>
+      <a href="#">Opinion</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap grid">
+    <!-- Main feed -->
+    <section class="card">
+      <div class="hero">
+        <div class="pill"><b>Top Story</b> · Student-built browser tools are getting smarter</div>
+        <h2>Can a browser extension spot suspicious DOM behavior in real time?</h2>
+        <p>A demo page that looks normal — but quietly triggers common injection patterns (safely).</p>
+      </div>
+
+      <article class="post">
+        <h3>Local devs build security UX that “explains” what changed on a page</h3>
+        <p>
+          The idea: watch runtime DOM mutations and flag risky patterns like inline event handlers,
+          script insertion, and javascript: URLs.
+        </p>
+
+        <div id="injectedArea" class="small">
+          <b>Live content:</b> comments load here as you browse.
+          <div class="small" style="margin-top:6px;color:var(--muted);">
+            (In demo mode, “suspicious” nodes will be highlighted.)
+          </div>
+        </div>
+      </article>
+
+      <article class="post">
+        <h3>What “DOM injection” looks like (without scary payloads)</h3>
+        <p>
+          Many real issues come from untrusted strings becoming HTML or executable behaviors.
+          For this demo, we only simulate those patterns so nothing runs.
+        </p>
+      </article>
+
+      <article class="post">
+        <h3>Upcoming: workshop on safe web instrumentation</h3>
+        <p>Hands-on lab: MutationObserver, sinks, and making alerts understandable.</p>
+      </article>
+    </section>
+
+    <!-- Sidebar / Demo controls -->
+    <aside class="card sidebar demo">
+      <div class="pad">
+        <h3>Demo controls</h3>
+        <div class="small">
+          Use these buttons to add DOM patterns your extension should detect.
+          Everything is <b>safe</b> (non-executing).
+        </div>
+
+        <div class="row">
+          <button id="btnScript">Add “script tag”</button>
+          <button id="btnInline">Add inline handler</button>
+          <button id="btnJsHref">Add javascript: link</button>
+          <button id="btnIframe">Add iframe</button>
+          <button id="btnStyleUrl">Add style url()</button>
+        </div>
+
+        <div class="row">
+          <button id="btnClear">Clear injected area</button>
+          <button id="btnStress">Stress (100 nodes)</button>
+        </div>
+
+        <div class="ok-note">
+          Tip: keep your extension popup open and hit <span class="kbd">Refresh</span> after each action.
+        </div>
+
+        <div class="danger-note">
+          For the demo: point at the highlighted boxes and say
+          “these are the DOM patterns our extension is watching for.”
+        </div>
+
+        <div class="item">
+          <div>
+            <div><b>Page status</b></div>
+            <div class="meta">Normal-looking UI + controlled mutations</div>
+          </div>
+          <div class="meta">v1</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+  const injectedArea = document.getElementById("injectedArea");
+
+  function addToInjected(el) {
+    injectedArea.appendChild(el);
+    injectedArea.appendChild(document.createElement("div")).style.height = "10px";
+  }
+
+  function markSuspicious(el, label) {
+    el.classList.add("sus");
+    el.setAttribute("data-flag", label);
+    return el;
+  }
+
+  // 1) Script tag insertion (SAFE): non-executable MIME type
+  document.getElementById("btnScript").addEventListener("click", () => {
+    const s = document.createElement("script");
+    s.type = "application/x-test"; // not executed
+    s.textContent = "/* demo: non-executing script element */\nconsole.log('not executed');";
+    document.body.appendChild(s); // still triggers SCRIPT node insertion detector
+
+    const note = document.createElement("div");
+    note.textContent = "Injected a <script> element (non-executing).";
+    addToInjected(markSuspicious(note, "SCRIPT tag added"));
+  });
+
+  // 2) Inline handler attribute
+  document.getElementById("btnInline").addEventListener("click", () => {
+    const b = document.createElement("button");
+    b.textContent = "“Load more comments” (demo)";
+    b.setAttribute("onclick", "void 0"); // inline handler attribute (flagged)
+    b.addEventListener("click", (e) => e.preventDefault()); // keep harmless
+
+    addToInjected(markSuspicious(b, "Inline on* handler"));
+  });
+
+  // 3) javascript: href (click prevented)
+  document.getElementById("btnJsHref").addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = "javascript:void 0"; // flagged by looksLikeJsUrl()
+    a.textContent = "Promo link (demo) — href=javascript:… (don’t click)";
+    a.style.display = "inline-block";
+    a.addEventListener("click", (e) => e.preventDefault()); // safety
+
+    addToInjected(markSuspicious(a, "javascript: URL in href"));
+  });
+
+  // 4) iframe without sandbox
+  document.getElementById("btnIframe").addEventListener("click", () => {
+    const iframe = document.createElement("iframe");
+    // No sandbox attribute on purpose (flagged)
+    iframe.srcdoc = "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;padding:10px'>Embedded widget (demo)</body>";
+    iframe.style.width = "100%";
+    iframe.style.height = "80px";
+    iframe.style.border = "1px solid rgba(255,255,255,.10)";
+    iframe.style.borderRadius = "12px";
+    iframe.style.background = "rgba(255,255,255,.02)";
+
+    addToInjected(markSuspicious(iframe, "iframe without sandbox"));
+  });
+
+  // 5) style attribute containing url(...)
+  document.getElementById("btnStyleUrl").addEventListener("click", () => {
+    const d = document.createElement("div");
+    d.textContent = "Sponsored banner (demo) — style url(...)";
+    d.setAttribute(
+      "style",
+      "padding:10px;border-radius:14px;border:1px solid rgba(255,255,255,.10);" +
+      "background-image:url(data:image/gif;base64,R0lGODlhAQABAAAAACw=);" // harmless, still matches url(
+    );
+
+    addToInjected(markSuspicious(d, "style contains url(...)"));
+  });
+
+  // Clear injected section
+  document.getElementById("btnClear").addEventListener("click", () => {
+    // remove everything except the header text lines at top
+    const keep = Array.from(injectedArea.childNodes).slice(0, 4);
+    injectedArea.innerHTML = "";
+    keep.forEach(n => injectedArea.appendChild(n));
+  });
+
+  // Stress
+  document.getElementById("btnStress").addEventListener("click", () => {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 100; i++) {
+      const div = document.createElement("div");
+      div.textContent = "Live comment #" + (i + 1);
+      frag.appendChild(div);
+    }
+    injectedArea.appendChild(frag);
+  });
+</script>
+</body>
+</html>
