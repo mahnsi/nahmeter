@@ -682,10 +682,8 @@ if (typeof window !== 'undefined') {
     console.log('🚀 Starting heuristics initialization...');
     initHeuristics().then(results => {
       if (results) {
-        console.log('✅ Initial heuristics analysis complete');
-      } else {
-        console.log('⚠️ Heuristics analysis returned no results');
-      }
+        lastResults = results;    
+      } 
     }).catch(err => {
       console.error('❌ Error initializing heuristics:', err);
     });
@@ -707,13 +705,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   (async () => {
     // Ensure we have results; if not, run analysis once
+    // Do NOT re-run heuristics here.
+    // Just wait until initial analysis is ready.
     if (!lastResults) {
-      try {
-        lastResults = await initHeuristics();
-      } catch (e) {
-        lastResults = { anomalyScore: 0, detectedIssues: [] };
-      }
+      sendResponse({
+        anomalyScore: 0,
+        domIssues: [],
+        sitePermissions: []
+      });
+      return;
     }
+
 
     const sitePermissions = await getSitePermissionsBestEffort();
     sendResponse({
@@ -732,17 +734,70 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, x));
 }
 
+
 async function getSitePermissionsBestEffort() {
   const perms = [];
 
-  // Notifications (reliable)
+  // Helper: safe query wrapper
+  async function tryQuery(name, label = null) {
+    try {
+      // Some browsers require exact permission names; if unsupported, it throws.
+      const res = await navigator.permissions.query({ name });
+      perms.push({ name: label || prettyLabel(name), state: res.state });
+    } catch {
+      // If query isn't supported, report "unknown" (or skip if you prefer)
+      perms.push({ name: label || prettyLabel(name), state: "unknown" });
+    }
+  }
+
+  // Notifications (special: doesn't use navigator.permissions consistently)
   try {
     perms.push({ name: "Notifications", state: Notification.permission }); // granted/denied/default
   } catch {
     perms.push({ name: "Notifications", state: "unknown" });
   }
 
-  // Geolocation (usually reliable)
+  // Location (usually supported)
+  await tryQuery("geolocation", "Location");
+
+  // Optional best-effort (support varies)
+  await tryQuery("camera", "Camera");
+  await tryQuery("microphone", "Microphone");
+
+  // Clipboard (often unsupported in permission query)
+  await tryQuery("clipboard-read", "Clipboard Read");
+  await tryQuery("clipboard-write", "Clipboard Write");
+
+  // Some browsers support this (varies)
+  await tryQuery("persistent-storage", "Persistent Storage");
+
+  // Normalize Notification "default" -> "prompt" to match others (optional)
+  perms.forEach(p => {
+    if (p.name === "Notifications" && p.state === "default") p.state = "prompt";
+  });
+
+  return perms;
+}
+
+function prettyLabel(name) {
+  // fallback: title case + spaces
+  return name
+    .split("-")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+async function getSitePermissionsBestEffort() {
+  const perms = [];
+
+  // Notifications 
+  try {
+    perms.push({ name: "Notifications", state: Notification.permission }); // granted/denied/default
+  } catch {
+    perms.push({ name: "Notifications", state: "unknown" });
+  }
+
+  // Geolocation
   try {
     const geo = await navigator.permissions.query({ name: "geolocation" });
     perms.push({ name: "Location", state: geo.state }); // granted/denied/prompt
