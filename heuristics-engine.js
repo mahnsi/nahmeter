@@ -619,72 +619,43 @@ function clamp(n, min, max) {
 async function getSitePermissionsBestEffort() {
   const perms = [];
 
-  // Helper: safe query wrapper
-  async function tryQuery(name, label = null) {
+  // 1) Notifications (most reliable)
+  try {
+    perms.push({ name: "Notifications", state: Notification.permission }); 
+    // granted | denied | default
+  } catch {
+    perms.push({ name: "Notifications", state: "unknown" });
+  }
+
+  // 2) Permissions API checks (best-effort)
+  // Some permission names aren't supported in every browser
+  const candidates = [
+    { key: "geolocation", label: "Location" },
+    { key: "camera", label: "Camera" },
+    { key: "microphone", label: "Microphone" },
+    { key: "clipboard-read", label: "Clipboard Read" },
+    { key: "clipboard-write", label: "Clipboard Write" },
+  ];
+
+  if (!navigator.permissions || !navigator.permissions.query) {
+    // Permissions API not available
+    // Return what we have (Notifications)
+    return perms;
+  }
+
+  for (const p of candidates) {
     try {
-      // Some browsers require exact permission names; if unsupported, it throws.
-      const res = await navigator.permissions.query({ name });
-      perms.push({ name: label || prettyLabel(name), state: res.state });
+      const result = await navigator.permissions.query({ name: p.key });
+      perms.push({ name: p.label, state: result.state }); 
+      // granted | denied | prompt (sometimes)
     } catch {
-      // If query isn't supported, report "unknown" (or skip if you prefer)
-      perms.push({ name: label || prettyLabel(name), state: "unknown" });
+      // Not supported in this browser/context -> show as Unknown
+      perms.push({ name: p.label, state: "unknown" });
     }
   }
 
-  // Notifications (special: doesn't use navigator.permissions consistently)
-  try {
-    perms.push({ name: "Notifications", state: Notification.permission }); // granted/denied/default
-  } catch {
-    perms.push({ name: "Notifications", state: "unknown" });
-  }
-
-  // Location (usually supported)
-  await tryQuery("geolocation", "Location");
-
-  // Optional best-effort (support varies)
-  await tryQuery("camera", "Camera");
-  await tryQuery("microphone", "Microphone");
-
-  // Clipboard (often unsupported in permission query)
-  await tryQuery("clipboard-read", "Clipboard Read");
-  await tryQuery("clipboard-write", "Clipboard Write");
-
-  // Some browsers support this (varies)
-  await tryQuery("persistent-storage", "Persistent Storage");
-
-  // Normalize Notification "default" -> "prompt" to match others (optional)
-  perms.forEach(p => {
-    if (p.name === "Notifications" && p.state === "default") p.state = "prompt";
-  });
-
   return perms;
 }
 
-function prettyLabel(name) {
-  // fallback: title case + spaces
-  return name
-    .split("-")
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
-async function getSitePermissionsBestEffort() {
-  const perms = [];
 
-  // Notifications 
-  try {
-    perms.push({ name: "Notifications", state: Notification.permission }); // granted/denied/default
-  } catch {
-    perms.push({ name: "Notifications", state: "unknown" });
-  }
-
-  // Geolocation
-  try {
-    const geo = await navigator.permissions.query({ name: "geolocation" });
-    perms.push({ name: "Location", state: geo.state }); // granted/denied/prompt
-  } catch {
-    perms.push({ name: "Location", state: "unknown" });
-  }
-
-  return perms;
-}
