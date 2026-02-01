@@ -112,8 +112,8 @@ function clampNumber(n, min, max) {
 function prettifyPermissionState(state) {
   if (state === "granted") return "Granted ✅";
   if (state === "denied") return "Denied ❌";
-  if (state === "prompt") return "Not asked (Prompt)";
-  if (state === "default") return "Not asked (Default)";
+  if (state === "prompt") return "None";
+  if (state === "default") return "None";
   return String(state || "Unknown");
 }
 
